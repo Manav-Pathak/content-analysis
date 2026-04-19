@@ -2,10 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
 
-# SQLite needs this special arg; harmless to remove when switching to Postgres
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+database_url = settings.sqlalchemy_database_url
 
-engine = create_engine(settings.database_url, connect_args=connect_args)
+# SQLite needs this special arg; harmless to remove when switching to Postgres
+connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+
+engine = create_engine(database_url, connect_args=connect_args, pool_pre_ping=True)
 
 # SessionLocal is the factory that creates individual DB sessions
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

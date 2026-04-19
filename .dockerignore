@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+implementation_plan.md
+claude postgres.txt

@@ -1,24 +1,23 @@
 from datetime import datetime, timedelta, timezone
+import bcrypt
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.user import User
-
-# bcrypt is intentionally slow — that's what makes it good for passwords
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 # ── Password Helpers ─────────────────────────────────────────────────────────
 
 def hash_password(plain_password: str) -> str:
     """Never store plain text. bcrypt adds a salt automatically."""
-    return pwd_context.hash(plain_password)
+    return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Constant-time comparison — prevents timing attacks."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """bcrypt.checkpw performs a safe hash comparison."""
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8"),
+    )
 
 
 # ── JWT Helpers ──────────────────────────────────────────────────────────────
