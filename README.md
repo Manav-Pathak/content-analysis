@@ -73,12 +73,10 @@ Open `http://localhost:8000/docs` and verify these in order:
 - `docker compose logs db`
   Postgres should report it is ready to accept connections
 - optional pgAdmin at `http://localhost:5050`
-  Register server with host `db`, port `5432`, and your Postgres credentials
+  Register server with host `db`, port `5432`, and Postgres credentials
 
 ### Current table behavior
 
 Right now tables are auto-created on API startup through SQLAlchemy:
 
 - [app/main.py](/mnt/d/map/app/main.py:10)
-
-That is good enough for the first build phase. Later we should switch to Alembic migrations before deployment gets serious.
