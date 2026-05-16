@@ -1,82 +1,230 @@
-## BrandTrack Backend
+# BrandTrack Backend
 
-This repo now treats Docker Compose as the primary development and deployment path.
+BrandTrack is a backend service for tracking brand and product mentions across external content platforms. Users can subscribe to keywords such as `Sony Headphones`; the system stores those tracking subscriptions and is designed to ingest mentions from sources such as YouTube, Reddit, and news APIs.
 
-### What runs where
+The project is being built as a production-aware FastAPI backend with PostgreSQL persistence, Docker-based local infrastructure, and a planned background ingestion pipeline using Redis and Celery.
 
-- `api` is the FastAPI container exposed on `http://localhost:8000`
-- `db` is the Dockerized PostgreSQL instance exposed on host port `5433`
-- `pgadmin` is optional and only starts when you ask for the `tools` profile
+## Current Status
 
-Your existing Windows PostgreSQL on `5432` stays separate. Docker Postgres uses:
+Implemented:
 
-- inside Docker network: `db:5432`
-- from your Windows host: `localhost:5433`
+- FastAPI application with Docker Compose workflow
+- PostgreSQL database container
+- Optional pgAdmin container
+- JWT-based authentication
+- User registration, login, and protected profile endpoint
+- SQLAlchemy models for users, tracked keywords, source configs, mentions, and ingestion runs
+- Keyword management API
+- Automatic YouTube and Reddit source config creation when a keyword is tracked
 
-### Why this setup
+Planned:
 
-This is the path that best matches eventual deployment on EC2:
+- Redis and Celery worker setup
+- Reddit ingestion through PRAW
+- YouTube Data API ingestion
+- Rate limiting and retry handling for external APIs
+- Mention analytics endpoints
+- Alembic migrations
+- AWS EC2 deployment configuration
 
-- the app connects to Postgres using the Docker service name
-- `docker compose up --build` boots the backend stack consistently
-- Swagger UI works from the containerized API at `http://localhost:8000/docs`
+## Tech Stack
 
-### Environment variables
+- FastAPI
+- PostgreSQL
+- SQLAlchemy
+- Pydantic
+- JWT authentication
+- bcrypt password hashing
+- Docker and Docker Compose
 
-Primary containerized workflow:
+Planned additions:
 
-- `DATABASE_URL=postgresql://<user>:<password>@db:5432/<db>`
+- Redis
+- Celery
+- PRAW
+- YouTube Data API client
 
-Optional local FastAPI fallback:
+## Architecture Overview
 
-- `LOCAL_DATABASE_URL=postgresql://<user>:<password>@localhost:5433/<db>`
+The backend separates API request handling, validation, business logic, and database models:
 
-If you only use Docker Compose, you do not need `LOCAL_DATABASE_URL`.
+```text
+Client / Swagger
+  -> app/routes
+      -> app/schemas
+      -> app/services
+          -> app/models
+              -> PostgreSQL
+```
 
-### Start the stack
+The current keyword flow stores user intent only. Creating a tracked keyword does not call YouTube or Reddit immediately. Instead, it creates database records that future background workers can read when performing ingestion.
 
-1. Make sure Docker Desktop is running.
-2. Create or update `.env` from `.env.example`.
-3. Start the main stack:
+```text
+User creates keyword
+  -> tracked_keywords row
+  -> keyword_source_configs rows for youtube and reddit
+  -> future worker reads configs
+  -> worker stores mentions and ingestion_runs
+```
+
+## Repository Structure
+
+```text
+app/
+  main.py                 FastAPI app setup, lifespan hook, router registration
+  config.py               Environment-based settings
+  database.py             SQLAlchemy engine, session factory, and DB dependency
+
+  dependencies/
+    auth.py               Reusable protected-route dependency
+
+  models/
+    user.py               Users table
+    tracked_keyword.py    User-owned keyword subscriptions
+    keyword_source_config.py
+                           Per-keyword source settings for YouTube, Reddit, news
+    mention.py            Stored external mentions with raw JSONB payloads
+    ingestion_run.py      Background ingestion run history and counters
+    enums.py              Shared enum values
+
+  routes/
+    auth.py               Register, login, and current-user endpoints
+    keywords.py           Tracked keyword endpoints
+
+  schemas/
+    user.py               Auth request and response schemas
+    keyword.py            Keyword request and response schemas
+
+  services/
+    auth.py               Password hashing, JWT creation, auth helpers
+    keywords.py           Keyword business logic and DB operations
+
+docker-compose.yml        Local API, PostgreSQL, and optional pgAdmin stack
+Dockerfile                FastAPI API image
+requirements.txt          Runtime dependencies for Docker builds
+```
+
+## Data Model Summary
+
+`users`
+
+Stores user accounts and authentication data.
+
+`tracked_keywords`
+
+Stores the keywords a user wants to monitor. Each user can track a normalized keyword only once.
+
+`keyword_source_configs`
+
+Stores source-specific settings for each keyword. A keyword currently gets default configs for YouTube and Reddit.
+
+`mentions`
+
+Stores individual external posts, videos, comments, or articles discovered during ingestion. Raw platform responses are stored in PostgreSQL `JSONB`.
+
+`ingestion_runs`
+
+Stores background job metadata such as status, retry count, cursor values, item counts, and errors.
+
+## Setup
+
+Create a `.env` file from `.env.example` and fill in the values:
+
+```bash
+cp .env.example .env
+```
+
+Start the main stack:
 
 ```bash
 docker compose up --build
 ```
 
-4. Start pgAdmin too if you want the GUI:
+The API will be available at:
+
+```text
+http://localhost:8000
+```
+
+Swagger UI:
+
+```text
+http://localhost:8000/docs
+```
+
+PostgreSQL runs inside Docker on `db:5432` and is exposed to the host on `localhost:5433`.
+
+Start pgAdmin with the optional tools profile:
 
 ```bash
 docker compose --profile tools up --build
 ```
 
-### What to test in Swagger
+pgAdmin will be available at:
 
-Open `http://localhost:8000/docs` and verify these in order:
+```text
+http://localhost:5050
+```
 
-1. `GET /health`
-   Expected: `{"status":"ok"}`
-2. `GET /health/db`
-   Expected: DB connection succeeds and `users_table_present` is `true`
-3. `POST /auth/register`
-   Expected: new user is created
-4. `POST /auth/login`
-   Expected: JWT access token is returned
-5. Swagger `Authorize`
-   Paste `Bearer <token>` or just the token depending on the Swagger prompt
-6. `GET /auth/me`
-   Expected: the authenticated user is returned
+When registering the database server inside pgAdmin, use:
 
-### What to verify outside Swagger
+```text
+Host: db
+Port: 5432
+```
 
-- `docker compose logs api`
-  The API should start without database connection errors
-- `docker compose logs db`
-  Postgres should report it is ready to accept connections
-- optional pgAdmin at `http://localhost:5050`
-  Register server with host `db`, port `5432`, and Postgres credentials
+## API Endpoints
 
-### Current table behavior
+Health:
 
-Right now tables are auto-created on API startup through SQLAlchemy:
+- `GET /health`
+- `GET /health/db`
 
-- [app/main.py](/mnt/d/map/app/main.py:10)
+Auth:
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+
+Keywords:
+
+- `POST /keywords`
+- `GET /keywords`
+- `GET /keywords/{keyword_id}`
+- `DELETE /keywords/{keyword_id}`
+
+## Verification Flow
+
+Open Swagger UI at `http://localhost:8000/docs` and verify:
+
+1. `GET /health` returns `{"status": "ok"}`.
+2. `GET /health/db` confirms the database connection and expected tables.
+3. `POST /auth/register` creates a user.
+4. `POST /auth/login` returns a JWT access token.
+5. Swagger authorization works with the token.
+6. `GET /auth/me` returns the authenticated user.
+7. `POST /keywords` creates a tracked keyword and default YouTube/Reddit source configs.
+8. `GET /keywords` returns the current user's active tracked keywords.
+9. `GET /keywords/{keyword_id}` returns one tracked keyword.
+10. `DELETE /keywords/{keyword_id}` deactivates a keyword.
+
+Example keyword request:
+
+```json
+{
+  "keyword": "Sony Headphones",
+  "description": "Track reviews, launch chatter, and buyer sentiment."
+}
+```
+
+## Development Notes
+
+Tables are currently created on application startup with:
+
+```python
+Base.metadata.create_all(bind=engine)
+```
+
+This is useful during early development. Production schema changes should use Alembic migrations.
+
+The API container is built from the local repository and uses Docker Compose for local development. A production deployment should remove development-only behavior, use stable image builds, and manage secrets outside committed files.
