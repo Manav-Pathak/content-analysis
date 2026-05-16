@@ -6,7 +6,7 @@ from app.database import engine, Base, get_db
 
 # Application startup wiring lives in this module.
 # Import models so SQLAlchemy knows about them before create_all
-import app.models.user  # noqa: F401
+import app.models  # noqa: F401
 
 
 @asynccontextmanager
@@ -45,8 +45,15 @@ def database_health_check(db: Session = Depends(get_db)):
     """
     db.execute(text("SELECT 1"))
     inspector = inspect(db.bind)
+    expected_tables = [
+        "users",
+        "tracked_keywords",
+        "keyword_source_configs",
+        "ingestion_runs",
+        "mentions",
+    ]
     return {
         "status": "ok",
         "database": "connected",
-        "users_table_present": inspector.has_table("users"),
+        "tables": {table_name: inspector.has_table(table_name) for table_name in expected_tables},
     }

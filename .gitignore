@@ -11,5 +11,7 @@ wheels/
 .env
 
 *.docx
+.codex
+claude postgres.txt
 
 implementation_plan.md
