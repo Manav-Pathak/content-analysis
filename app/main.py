@@ -28,7 +28,9 @@ app = FastAPI(
 
 # Register routers
 from app.routes import auth  # noqa: E402
+from app.routes import keywords  # noqa: E402
 app.include_router(auth.router)
+app.include_router(keywords.router)
 
 
 @app.get("/health", tags=["health"])
